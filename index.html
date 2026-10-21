@@ -203,19 +203,24 @@ main{flex:1;display:flex;min-height:0}
 <div class="toast" id="toast"></div>
 
 <!-- LIBS -->
-<!-- Load the standard, non-module PDF.js UMD library -->
-<script src="https://cloudflare.com"></script>
+<!-- Load the core PDF.js module via cdnjs -->
+<script src="https://cloudflare.com" type="module"></script>
 
-<script>
+<!-- Notice the type="module" attribute added here! -->
+<script type="module">
 "use strict";
 
-// Fallback logic to grab the PDF.js global context safely
-const pdfjsLib = window['pdfjs-dist/build/pdf'] || window['pdfjsLib'];
+// Explicitly import the library into your script's ecosystem
+import * as pdfjsLibModule from 'https://cloudflare.com';
+
+// Bind it globally to ensure the rest of your legacy functions can find it
+window.pdfjsLib = pdfjsLibModule;
+const pdfjsLib = window.pdfjsLib;
 
 if (!pdfjsLib) {
   console.error("PDF.js library failed to bind to the window global context.");
 } else {
-  // Configure the worker to use a matching, stable UMD external script
+  // Point the worker directly to the modern external script path
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cloudflare.com';
 }
 
