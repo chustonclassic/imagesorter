@@ -203,22 +203,23 @@ main{flex:1;display:flex;min-height:0}
 <div class="toast" id="toast"></div>
 
 <!-- LIBS -->
-<!-- Load the core PDF.js viewer library -->
-<script src="https://cloudflare.com"></script>
-<!-- Load the worker file required to parse PDFs in the background -->
-<script src="https://cloudflare.com"></script>
+<!-- Load the core PDF.js library via cdnjs -->
+<script src="https://cloudflare.com" type="module"></script>
 
 <script>
 "use strict";
 
-// Fallback logic to grab the PDF.js global context from modern CDN mappings
-const pdfjsLib = window['pdfjs-dist/build/pdf'] || window['pdfjsLib'];
+// Modern PDF.js module builds require manual global binding if you are accessing them out-of-module
+import * as pdfjsLibModule from 'https://cloudflare.com';
+window.pdfjsLib = pdfjsLibModule;
 
-  if (!pdfjsLib) {
+const pdfjsLib = window.pdfjsLib;
+
+if (!pdfjsLib) {
   console.error("PDF.js library failed to bind to the window global context.");
 } else {
-  // Configure the worker reference correctly
-  pdfjsLib.GlobalWorkerOptions.workerSrc = window['pdfjs-dist/build/pdf.worker'] || window['pdfjsWorker'];
+  // Point the worker directly to the modern external script path
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cloudflare.com';
 }
 
 const $ = s => document.querySelector(s);
