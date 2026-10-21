@@ -211,11 +211,15 @@ main{flex:1;display:flex;min-height:0}
 <script>
 "use strict";
 
-// Properly map the global PDF.js library instance
-const pdfjsLib = window['pdfjs-dist/build/pdf'];
+// Fallback logic to grab the PDF.js global context from modern CDN mappings
+const pdfjsLib = window['pdfjs-dist/build/pdf'] || window['pdfjsLib'];
 
-// Point the worker source directly to the loaded worker global
-pdfjsLib.GlobalWorkerOptions.workerSrc = window['pdfjs-dist/build/pdf.worker'];
+  if (!pdfjsLib) {
+  console.error("PDF.js library failed to bind to the window global context.");
+} else {
+  // Configure the worker reference correctly
+  pdfjsLib.GlobalWorkerOptions.workerSrc = window['pdfjs-dist/build/pdf.worker'] || window['pdfjsWorker'];
+}
 
 const $ = s => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
