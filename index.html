@@ -203,9 +203,15 @@ main{flex:1;display:flex;min-height:0}
 <div class="toast" id="toast"></div>
 
 <!-- LIBS -->
+<script src="https://cloudflare.com"></script>
+<script src="https://cloudflare.com"></script>
 
 <script>
 "use strict";
+
+// Tell PDF.js to use the globally loaded worker instead of trying to look up a separate file path
+pdfjsLib.GlobalWorkerOptions.workerSrc = window['pdfjs-dist/build/pdf.worker'];
+
 const $ = s => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
 const natCmp = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
