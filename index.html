@@ -203,13 +203,18 @@ main{flex:1;display:flex;min-height:0}
 <div class="toast" id="toast"></div>
 
 <!-- LIBS -->
+<!-- Load the core PDF.js viewer library -->
 <script src="https://cloudflare.com"></script>
+<!-- Load the worker file required to parse PDFs in the background -->
 <script src="https://cloudflare.com"></script>
 
 <script>
 "use strict";
 
-// Tell PDF.js to use the globally loaded worker instead of trying to look up a separate file path
+// Properly map the global PDF.js library instance
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
+
+// Point the worker source directly to the loaded worker global
 pdfjsLib.GlobalWorkerOptions.workerSrc = window['pdfjs-dist/build/pdf.worker'];
 
 const $ = s => document.querySelector(s);
