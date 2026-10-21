@@ -1,0 +1,766 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estimate Photo Sorter</title>
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#fff; --ink:#1d2330; --muted:#677084; --line:#d9dde5;
+  --accent:#1f6feb; --accent-soft:rgba(31,111,235,.14); --done:#1a7f37; --done-soft:rgba(26,127,55,.13);
+  --warn:#d1242f; --hover:rgba(255,196,0,.22);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:14px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif;color:var(--ink);background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+button,select,input{font:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;color:var(--ink)}
+button:hover:not(:disabled){border-color:#aab2c0;background:#f8f9fb}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary:hover:not(:disabled){background:#1a5fcc}
+button.small{padding:2px 8px;font-size:12px}
+label.btn{display:inline-block;cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px}
+label.btn:hover{border-color:#aab2c0;background:#f8f9fb}
+label.btn input{display:none}
+
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:16px;margin:0 12px 0 0;font-weight:600}
+header .spacer{flex:1}
+header .stat{color:var(--muted);font-size:13px}
+
+main{flex:1;display:flex;min-height:0}
+.pane{display:flex;flex-direction:column;min-width:0;min-height:0}
+#left{flex:1 1 50%;border-right:1px solid var(--line)}
+#right{flex:1 1 50%}
+.pane-head{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;font-size:13px}
+.pane-head b{font-weight:600}
+.pane-head .spacer{flex:1}
+.pane-body{flex:1;overflow:auto;position:relative}
+.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:24px;gap:10px}
+.empty big{font-size:16px;color:var(--ink)}
+.drop-hot{outline:3px dashed var(--accent);outline-offset:-8px}
+
+/* PDF pages */
+#pages{padding:14px;display:flex;flex-direction:column;gap:14px;align-items:center}
+.page{position:relative;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18);width:100%;max-width:1100px;user-select:none}
+.page canvas{display:block;width:100%;height:auto}
+.page .ov{position:absolute;inset:0}
+.row{position:absolute;border-radius:2px;cursor:pointer}
+.row:hover{background:var(--hover)}
+.row.has{background:var(--done-soft);box-shadow:inset 3px 0 0 var(--done)}
+.row.active{background:var(--accent-soft);outline:2px solid var(--accent);z-index:2}
+.row .tag{position:absolute;right:-4px;top:50%;transform:translate(100%,-50%);background:var(--done);color:#fff;font-size:11px;font-weight:600;border-radius:9px;padding:0 7px;white-space:nowrap;pointer-events:none}
+.row.active .tag{background:var(--accent)}
+.page.nonum .row:not(.num):not(.has):not(.active){display:none}
+.drawbox{position:absolute;border:2px dashed var(--warn);background:rgba(209,36,47,.08);pointer-events:none}
+
+/* Active line strip */
+#strip{background:var(--panel);border-bottom:1px solid var(--line);padding:8px 12px;display:flex;flex-direction:column;gap:6px}
+#strip .title{display:flex;gap:8px;align-items:center;font-size:13px}
+#strip .title .txt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#strip .none{color:var(--muted)}
+#stripThumbs{display:flex;gap:6px;overflow-x:auto;min-height:0}
+.st{position:relative;flex:0 0 auto;width:86px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#eef0f3}
+.st img{display:block;width:100%;height:64px;object-fit:cover}
+.st .n{position:absolute;left:3px;top:3px;background:var(--accent);color:#fff;font-size:11px;font-weight:600;border-radius:9px;padding:0 6px}
+.st .ctl{display:flex;justify-content:space-between;background:#fff}
+.st .ctl button{border:0;border-radius:0;padding:1px 0;flex:1;font-size:12px;background:#fff}
+.st .ctl button:hover{background:#eef2fb}
+.st.snip img{object-fit:contain;background:#fff}
+.st.snip .n{background:#6b4fd8}
+
+/* Photo grid */
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--tw,150px),1fr));gap:10px;padding:12px}
+.ph{position:relative;border:2px solid transparent;border-radius:8px;background:var(--panel);box-shadow:0 1px 2px rgba(0,0,0,.12);cursor:pointer;overflow:hidden}
+.ph:hover{border-color:#aab2c0}
+.ph .im{aspect-ratio:4/3;background:#e7e9ee center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px}
+.ph .nm{font-size:11px;color:var(--muted);padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph .badge{position:absolute;left:6px;top:6px;background:var(--done);color:#fff;font-weight:600;font-size:12px;border-radius:10px;padding:1px 8px}
+.ph .where{position:absolute;right:6px;top:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border-radius:9px;padding:1px 7px;max-width:70%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ph .zoom{position:absolute;right:6px;bottom:26px;background:rgba(0,0,0,.55);color:#fff;border:0;border-radius:6px;padding:0 7px;font-size:13px;opacity:0}
+.ph:hover .zoom{opacity:1}
+.ph.mine{border-color:var(--accent)}
+.ph.mine .badge{background:var(--accent)}
+.ph.other{opacity:.55}
+.ph.other:hover{opacity:1}
+
+/* Modal */
+.modal{position:fixed;inset:0;background:rgba(15,20,30,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:24px}
+.modal.open{display:flex}
+.dlg{background:var(--panel);border-radius:10px;max-width:1100px;width:100%;max-height:100%;display:flex;flex-direction:column;overflow:hidden}
+.dlg-head{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);gap:10px}
+.dlg-head h2{margin:0;font-size:16px;flex:1}
+.dlg-body{overflow:auto;padding:16px}
+.dlg-foot{display:flex;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.dlg-foot .spacer{flex:1}
+.opts{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:14px;font-size:13px}
+.opts label{display:flex;align-items:center;gap:6px}
+#seq{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.sq{border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fafbfc}
+.sq img{display:block;width:100%;height:110px;object-fit:cover;background:#e7e9ee}
+.sq.snip img{object-fit:contain;background:#fff}
+.sq div{font-size:11px;padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sq div b{color:var(--accent)}
+.sq.snip div b{color:#6b4fd8}
+#lightbox img{max-width:100%;max-height:calc(100vh - 140px);display:block;margin:auto}
+#snipPreview{max-width:100%;border:1px solid var(--line)}
+.progress{font-size:13px;color:var(--muted)}
+.help{font-size:13px;color:var(--muted)}
+.help kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:12px;background:#fff;color:var(--ink)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1d2330;color:#fff;padding:10px 16px;border-radius:8px;z-index:60;font-size:13px;display:none;max-width:90vw}
+</style>
+</head>
+<body>
+<header>
+  <h1>Estimate Photo Sorter</h1>
+  <label class="btn">📄 Open estimate PDF<input type="file" id="pdfInput" accept="application/pdf,.pdf"></label>
+  <label class="btn">🖼️ Open photo folder<input type="file" id="folderInput" webkitdirectory directory multiple></label>
+  <label class="btn" title="Pick individual photos instead of a folder">+ Photos<input type="file" id="filesInput" accept="image/*,.heic,.heif" multiple></label>
+  <span class="spacer"></span>
+  <span class="stat" id="stat"></span>
+  <button id="clearBtn" title="Remove all assignments">Clear all</button>
+  <button class="primary" id="exportBtn" disabled>Export…</button>
+</header>
+
+<main>
+  <section class="pane" id="left">
+    <div class="pane-head">
+      <b>Estimate</b><span id="pdfName" class="help"></span>
+      <span class="spacer"></span>
+      <label title="Only show rows that start with a line number"><input type="checkbox" id="numOnly" checked> Numbered lines only</label>
+    </div>
+    <div class="pane-body" id="pdfBody">
+      <div class="empty" id="pdfEmpty">
+        <big>Open or drop the estimate PDF here</big>
+        <div>Click a line to select it, then click photos on the right to attach them.</div>
+        <div class="help"><kbd>Shift</kbd>+click extends a line over several rows · drag on the page to draw a custom box · <kbd>↑</kbd><kbd>↓</kbd> move between lines</div>
+      </div>
+      <div id="pages"></div>
+    </div>
+  </section>
+
+  <section class="pane" id="right">
+    <div id="strip">
+      <div class="title">
+        <span class="txt" id="stripTxt"><span class="none">No line selected. Click a line on the estimate.</span></span>
+        <button class="small" id="previewSnipBtn" disabled>View snip</button>
+        <button class="small" id="clearLineBtn" disabled>Clear line</button>
+      </div>
+      <div id="stripThumbs"></div>
+    </div>
+    <div class="pane-head">
+      <b>Photos</b><span id="photoCount" class="help"></span>
+      <span class="spacer"></span>
+      <select id="filter">
+        <option value="all">Show all</option>
+        <option value="unassigned">Unassigned only</option>
+        <option value="mine">This line only</option>
+      </select>
+      <label title="Thumbnail size">Size <input type="range" id="tsize" min="90" max="320" value="150"></label>
+    </div>
+    <div class="pane-body" id="photoBody">
+      <div class="empty" id="photoEmpty">
+        <big>Open or drop a folder of photos here</big>
+        <div>Photos are sorted by file name. Click a photo to attach it to the selected line, and click it again to detach it.</div>
+      </div>
+      <div id="grid"></div>
+    </div>
+  </section>
+</main>
+
+<div class="modal" id="exportModal">
+  <div class="dlg">
+    <div class="dlg-head"><h2>Export</h2><button id="exportClose">✕</button></div>
+    <div class="dlg-body">
+      <div class="opts">
+        <label><input type="checkbox" id="optSnip" checked> Put estimate snip before each line's photos</label>
+        <label>Context rows around line <select id="optCtx"><option>0</option><option>1</option><option selected>2</option><option>3</option><option>5</option></select></label>
+        <label>File names <select id="optNames">
+          <option value="plain">001.jpg, 002.jpg …</option>
+          <option value="orig">001 - original name.jpg</option>
+        </select></label>
+        <label><input type="checkbox" id="optRest"> Add unassigned photos at the end</label>
+      </div>
+      <div id="seq"></div>
+    </div>
+    <div class="dlg-foot">
+      <span class="progress" id="exportProgress"></span>
+      <span class="spacer"></span>
+      <button id="saveFolderBtn" title="Write the numbered files straight into a folder you choose">Save to folder…</button>
+      <button class="primary" id="zipBtn">Download ZIP</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="lightbox">
+  <div class="dlg" style="max-width:1400px">
+    <div class="dlg-head"><h2 id="lbTitle"></h2><button id="lbClose">✕</button></div>
+    <div class="dlg-body" id="lbBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- LIBS -->
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const natCmp = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+const IMG_EXT = /\.(jpe?g|png|gif|webp|bmp|heic|heif|tiff?)$/i;
+const SNIP_SCALE = 2.5;
+
+const state = {
+  pdf: null, pdfName: '', pages: [],  // pages: {num, w, h, rows:[{x0,y0,x1,y1,text,num}], contentX0, contentX1, el, ov}
+  photos: [],                          // {id, file, name, thumb}
+  lines: new Map(),                    // key -> {key, page, r0, r1, rect?, photos:[photoId]}
+  active: null,                        // line key
+};
+const photoById = new Map();
+let nextPhotoId = 1;
+
+function toast(msg, ms = 3500) {
+  const t = $('#toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = 'none', ms);
+}
+
+/* ---------------- PDF ---------------- */
+// pdf.worker is inlined below pdf.js, so pdf.js runs its worker on the main thread (no Worker/file:// issues).
+
+async function loadPdf(file) {
+  const data = new Uint8Array(await file.arrayBuffer());
+  let pdf;
+  try { pdf = await pdfjsLib.getDocument({ data, isEvalSupported: false }).promise; }
+  catch (e) { toast('Could not open that PDF: ' + e.message); return; }
+  state.pdf = pdf; state.pdfName = file.name; state.pages = []; state.lines.clear(); state.active = null;
+  $('#pdfName').textContent = file.name + ' · ' + pdf.numPages + ' page' + (pdf.numPages > 1 ? 's' : '');
+  $('#pdfEmpty').style.display = 'none';
+  const host = $('#pages'); host.innerHTML = '';
+  let anyNumbered = false;
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const page = await pdf.getPage(n);
+    const vp1 = page.getViewport({ scale: 1 });
+    const pg = { num: n, w: vp1.width, h: vp1.height, rows: [] };
+    pg.rows = await detectRows(page, vp1);
+    if (pg.rows.some(r => r.num)) anyNumbered = true;
+    const xs = pg.rows.length ? pg.rows : [{ x0: 0, x1: vp1.width }];
+    pg.contentX0 = Math.max(0, Math.min(...xs.map(r => r.x0)) - 6);
+    pg.contentX1 = Math.min(vp1.width, Math.max(...xs.map(r => r.x1)) + 6);
+
+    const wrap = el('div', 'page'); wrap.dataset.page = n;
+    const canvas = el('canvas');
+    const scale = Math.min(2.2, 1400 / vp1.width);
+    const vp = page.getViewport({ scale });
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    wrap.style.aspectRatio = vp1.width + ' / ' + vp1.height;
+    const ov = el('div', 'ov');
+    wrap.append(canvas, ov); host.append(wrap);
+    pg.el = wrap; pg.ov = ov;
+    state.pages.push(pg);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    buildOverlay(pg);
+  }
+  $('#numOnly').checked = anyNumbered;
+  applyNumOnly();
+  if (!state.pages.some(p => p.rows.length)) toast('No text found in this PDF (it may be a scan). Drag on the page to draw a box around each line.', 7000);
+  tryRestore();
+  refresh();
+}
+
+// Group text items into visual rows (page units, top-left origin).
+async function detectRows(page, vp) {
+  const tc = await page.getTextContent();
+  const items = [];
+  for (const it of tc.items) {
+    if (!it.str || !it.str.trim()) continue;
+    const [x, y] = vp.convertToViewportPoint(it.transform[4], it.transform[5]);
+    const h = Math.hypot(it.transform[2], it.transform[3]) || it.height || 8;
+    items.push({ x, base: y, h, w: it.width, s: it.str });
+  }
+  items.sort((a, b) => a.base - b.base || a.x - b.x);
+  const rows = [];
+  for (const it of items) {
+    const r = rows[rows.length - 1];
+    if (r && Math.abs(it.base - r.base) <= Math.max(2, Math.min(r.h, it.h) * 0.45)) {
+      r.items.push(it); r.h = Math.max(r.h, it.h);
+    } else rows.push({ base: it.base, h: it.h, items: [it] });
+  }
+  return rows.map(r => {
+    r.items.sort((a, b) => a.x - b.x);
+    let text = '', lastX = -1;
+    for (const it of r.items) { text += (text && it.x - lastX > 1.5 ? ' ' : '') + it.s; lastX = it.x + it.w; }
+    text = text.replace(/\s+/g, ' ').trim();
+    const x0 = Math.min(...r.items.map(i => i.x)), x1 = Math.max(...r.items.map(i => i.x + i.w));
+    return { x0, x1, y0: r.base - r.h * 0.92, y1: r.base + r.h * 0.28, text, num: /^\d{1,3}\b/.test(text) };
+  });
+}
+
+function buildOverlay(pg) {
+  pg.ov.innerHTML = '';
+  const pct = (v, of) => (v / of * 100) + '%';
+  pg.rows.forEach((r, i) => {
+    const d = el('div', 'row' + (r.num ? ' num' : ''));
+    d.style.left = pct(pg.contentX0, pg.w); d.style.width = pct(pg.contentX1 - pg.contentX0, pg.w);
+    d.style.top = pct(r.y0 - 1, pg.h); d.style.height = pct(r.y1 - r.y0 + 2, pg.h);
+    d.title = r.text; d.dataset.i = i;
+    pg.ov.append(d); r.el = d;
+  });
+  // drag-to-draw custom box
+  pg.ov.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const box = pg.ov.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY; let draw = null;
+    const toPage = (cx, cy) => [(cx - box.left) / box.width * pg.w, (cy - box.top) / box.height * pg.h];
+    const move = ev => {
+      if (!draw && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
+      if (!draw) { draw = el('div', 'drawbox'); pg.ov.append(draw); }
+      const l = Math.min(sx, ev.clientX) - box.left, t = Math.min(sy, ev.clientY) - box.top;
+      Object.assign(draw.style, { left: l + 'px', top: t + 'px', width: Math.abs(ev.clientX - sx) + 'px', height: Math.abs(ev.clientY - sy) + 'px' });
+    };
+    const up = ev => {
+      removeEventListener('mousemove', move); removeEventListener('mouseup', up);
+      if (draw) {
+        draw.remove();
+        const [ax, ay] = toPage(sx, sy), [bx, by] = toPage(ev.clientX, ev.clientY);
+        const rect = { x0: Math.min(ax, bx), y0: Math.min(ay, by), x1: Math.max(ax, bx), y1: Math.max(ay, by) };
+        const key = 'c' + pg.num + ':' + Math.round(rect.y0) + ':' + Math.round(rect.x0);
+        state.lines.set(key, { key, page: pg.num, rect, photos: [] });
+        setActive(key);
+      } else {
+        const t = ev.target.closest('.row'); if (!t) return;
+        if (t.classList.contains('custom')) { setActive(t.dataset.key); return; }
+        clickRow(pg, +t.dataset.i, ev.shiftKey);
+      }
+    };
+    addEventListener('mousemove', move); addEventListener('mouseup', up);
+    e.preventDefault();
+  });
+}
+
+function clickRow(pg, i, extend) {
+  const a = state.active && state.lines.get(state.active);
+  if (extend && a && a.page === pg.num && !a.rect) {
+    const lo = Math.min(a.r0, i), hi = Math.max(a.r1, i);
+    // drop any other lines swallowed by the extension, keeping their photos
+    for (const [k, l] of state.lines) if (k !== a.key && l.page === pg.num && !l.rect && l.r0 >= lo && l.r0 <= hi) { a.photos.push(...l.photos); state.lines.delete(k); }
+    a.r0 = lo; a.r1 = hi;
+    setActive(a.key); return;
+  }
+  const hit = [...state.lines.values()].find(l => l.page === pg.num && !l.rect && i >= l.r0 && i <= l.r1);
+  if (hit) { setActive(hit.key); return; }
+  const key = pg.num + ':' + i;
+  state.lines.set(key, { key, page: pg.num, r0: i, r1: i, photos: [] });
+  setActive(key);
+}
+
+function setActive(key) {
+  // discard an empty line we're leaving so it doesn't linger
+  const prev = state.active && state.lines.get(state.active);
+  if (prev && prev.key !== key && !prev.photos.length) state.lines.delete(prev.key);
+  state.active = key;
+  refresh();
+  const l = state.lines.get(key);
+  if (l) { const r = lineRect(l), pg = state.pages[l.page - 1]; scrollIntoViewIfNeeded(pg, r); }
+}
+
+function scrollIntoViewIfNeeded(pg, r) {
+  const body = $('#pdfBody'), br = body.getBoundingClientRect(), pr = pg.el.getBoundingClientRect();
+  const top = pr.top + r.y0 / pg.h * pr.height, bot = pr.top + r.y1 / pg.h * pr.height;
+  if (top < br.top + 40 || bot > br.bottom - 40) body.scrollTop += (top - br.top) - br.height / 3;
+}
+
+function lineRect(l) {
+  if (l.rect) return l.rect;
+  const pg = state.pages[l.page - 1], rows = pg.rows.slice(l.r0, l.r1 + 1);
+  return { x0: pg.contentX0, x1: pg.contentX1, y0: Math.min(...rows.map(r => r.y0)), y1: Math.max(...rows.map(r => r.y1)) };
+}
+function lineText(l) {
+  if (l.rect) return 'Custom box (page ' + l.page + ')';
+  return state.pages[l.page - 1].rows.slice(l.r0, l.r1 + 1).map(r => r.text).join(' / ');
+}
+function sortedLines() {
+  return [...state.lines.values()].sort((a, b) => a.page - b.page || lineRect(a).y0 - lineRect(b).y0 || lineRect(a).x0 - lineRect(b).x0);
+}
+function applyNumOnly() { for (const p of state.pages) p.el.classList.toggle('nonum', $('#numOnly').checked); }
+
+/* ---------------- Photos ---------------- */
+function addPhotos(files) {
+  const imgs = [...files].filter(f => (f.type && f.type.startsWith('image/')) || IMG_EXT.test(f.name));
+  if (!imgs.length) { toast('No images found in that selection.'); return; }
+  const have = new Set(state.photos.map(p => p.relName));
+  for (const f of imgs.sort((a, b) => natCmp(a.webkitRelativePath || a.name, b.webkitRelativePath || b.name))) {
+    const relName = f.webkitRelativePath || f.name;
+    if (have.has(relName)) continue;
+    const p = { id: nextPhotoId++, file: f, name: f.name, relName, thumb: null };
+    state.photos.push(p); photoById.set(p.id, p);
+  }
+  state.photos.sort((a, b) => natCmp(a.relName, b.relName));
+  $('#photoEmpty').style.display = 'none';
+  buildGrid(); queueThumbs(); tryRestore(); refresh();
+}
+
+function buildGrid() {
+  const g = $('#grid'); g.innerHTML = '';
+  for (const p of state.photos) {
+    const d = el('div', 'ph'); d.dataset.id = p.id;
+    const im = el('div', 'im', p.thumb ? '' : '…');
+    if (p.thumb) im.style.backgroundImage = `url("${p.thumb}")`;
+    const z = el('button', 'zoom', '⤢'); z.title = 'View larger';
+    d.append(im, el('div', 'nm', p.name), z);
+    p.el = d; p.imEl = im; g.append(d);
+  }
+}
+
+const thumbQueue = [];
+let thumbWorkers = 0;
+function queueThumbs() {
+  for (const p of state.photos) if (!p.thumb && !p.queued) { p.queued = true; thumbQueue.push(p); }
+  while (thumbWorkers < 4 && thumbQueue.length) { thumbWorkers++; thumbLoop(); }
+}
+async function thumbLoop() {
+  while (thumbQueue.length) {
+    const p = thumbQueue.shift();
+    try {
+      let bmp;
+      try { bmp = await createImageBitmap(p.file, { resizeWidth: 400, resizeQuality: 'medium' }); }
+      catch { bmp = await createImageBitmap(p.file); }
+      const s = Math.min(1, 400 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas'); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); bmp.close && bmp.close();
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.8));
+      p.thumb = URL.createObjectURL(blob);
+    } catch { p.thumb = ''; p.noPreview = true; }
+    if (p.imEl) { if (p.thumb) { p.imEl.style.backgroundImage = `url("${p.thumb}")`; p.imEl.textContent = ''; } else p.imEl.textContent = 'No preview'; }
+    const a = state.active && state.lines.get(state.active);
+    if (a && a.photos.includes(p.id)) refreshStrip();
+  }
+  thumbWorkers--;
+}
+
+function clickPhoto(id) {
+  const a = state.active && state.lines.get(state.active);
+  if (!a) { toast('Select a line on the estimate first.'); return; }
+  const idx = a.photos.indexOf(id);
+  if (idx >= 0) a.photos.splice(idx, 1);
+  else {
+    for (const l of state.lines.values()) { const j = l.photos.indexOf(id); if (j >= 0) l.photos.splice(j, 1); }
+    a.photos.push(id);
+  }
+  for (const [k, l] of state.lines) if (k !== a.key && !l.photos.length) state.lines.delete(k);
+  refresh();
+}
+
+/* ---------------- Sequence & refresh ---------------- */
+// Returns [{kind:'snip'|'photo', line, photo?, n}]
+function buildSequence(withSnip, withRest) {
+  const seq = []; let n = 1;
+  const lines = sortedLines().filter(l => l.photos.length);
+  lines.forEach((l, li) => {
+    l.no = li + 1;
+    if (withSnip) seq.push({ kind: 'snip', line: l, n: n++ });
+    for (const id of l.photos) seq.push({ kind: 'photo', line: l, photo: photoById.get(id), n: n++ });
+  });
+  if (withRest) {
+    const used = new Set(lines.flatMap(l => l.photos));
+    for (const p of state.photos) if (!used.has(p.id)) seq.push({ kind: 'photo', line: null, photo: p, n: n++ });
+  }
+  return seq;
+}
+
+function refresh() {
+  const withSnip = $('#optSnip').checked;
+  const seq = buildSequence(withSnip, false);
+  const numOf = new Map(), lineOf = new Map();
+  for (const s of seq) if (s.kind === 'photo') { numOf.set(s.photo.id, s.n); lineOf.set(s.photo.id, s.line); }
+
+  // rows
+  for (const pg of state.pages) {
+    pg.ov.querySelectorAll('.row.custom').forEach(e => e.remove());
+    for (const r of pg.rows) { r.el.className = 'row' + (r.num ? ' num' : ''); r.el.innerHTML = ''; delete r.el.dataset.key; }
+  }
+  for (const l of state.lines.values()) {
+    const pg = state.pages[l.page - 1]; if (!pg) continue;
+    const cls = (l.photos.length ? ' has' : '') + (l.key === state.active ? ' active' : '');
+    let tagHost;
+    if (l.rect) {
+      const d = el('div', 'row custom' + cls); d.dataset.key = l.key;
+      Object.assign(d.style, { left: l.rect.x0 / pg.w * 100 + '%', top: l.rect.y0 / pg.h * 100 + '%', width: (l.rect.x1 - l.rect.x0) / pg.w * 100 + '%', height: (l.rect.y1 - l.rect.y0) / pg.h * 100 + '%' });
+      pg.ov.append(d); tagHost = d;
+    } else {
+      for (let i = l.r0; i <= l.r1; i++) { pg.rows[i].el.className += cls; pg.rows[i].el.dataset.key = l.key; }
+      tagHost = pg.rows[l.r0].el;
+    }
+    if (l.photos.length || l.key === state.active) {
+      const first = seq.find(s => s.line === l);
+      tagHost.append(el('span', 'tag', l.photos.length ? `#${first.n}–${first.n + l.photos.length - (withSnip ? 0 : 1)} · ${l.photos.length} 📷` : 'selected'));
+    }
+  }
+
+  // photos
+  const a = state.active && state.lines.get(state.active);
+  const filter = $('#filter').value;
+  for (const p of state.photos) {
+    if (!p.el) continue;
+    const n = numOf.get(p.id), l = lineOf.get(p.id);
+    p.el.classList.toggle('mine', !!(a && l === a));
+    p.el.classList.toggle('other', !!(l && l !== a));
+    p.el.querySelectorAll('.badge,.where').forEach(e => e.remove());
+    if (n) {
+      p.el.append(el('span', 'badge', n));
+      if (l !== a) { const w = el('span', 'where', lineText(l)); p.el.append(w); }
+    }
+    p.el.style.display = filter === 'unassigned' ? (l && l !== a ? 'none' : '') : filter === 'mine' ? (l === a && a ? '' : 'none') : '';
+  }
+
+  refreshStrip(seq);
+  const used = seq.filter(s => s.kind === 'photo').length;
+  $('#photoCount').textContent = state.photos.length ? `${state.photos.length} photos · ${used} assigned` : '';
+  const nLines = sortedLines().filter(l => l.photos.length).length;
+  $('#stat').textContent = nLines ? `${nLines} line${nLines > 1 ? 's' : ''} · ${seq.length} files to export` : '';
+  $('#exportBtn').disabled = !nLines;
+  save();
+}
+
+function refreshStrip(seq) {
+  seq = seq || buildSequence($('#optSnip').checked, false);
+  const a = state.active && state.lines.get(state.active);
+  const box = $('#stripThumbs'); box.innerHTML = '';
+  $('#clearLineBtn').disabled = !a; $('#previewSnipBtn').disabled = !a;
+  if (!a) { $('#stripTxt').innerHTML = '<span class="none">No line selected. Click a line on the estimate.</span>'; return; }
+  $('#stripTxt').textContent = 'Assigning to: ' + lineText(a);
+  $('#stripTxt').title = lineText(a);
+  const mine = seq.filter(s => s.line === a);
+  if (!mine.length) { box.append(el('span', 'help', 'Click photos below to attach them to this line.')); return; }
+  for (const s of mine) {
+    if (s.kind === 'snip') {
+      const d = el('div', 'st snip'); const im = el('img'); im.alt = 'estimate snip';
+      makeSnip(a, +$('#optCtx').value, 0.6).then(c => im.src = c.toDataURL('image/jpeg', 0.7));
+      const ctl = el('div', 'ctl'), b = el('button', '', 'estimate'); b.disabled = true; ctl.append(b);
+      d.append(im, el('span', 'n', s.n), ctl); box.append(d); continue;
+    }
+    const p = s.photo, d = el('div', 'st'), im = el('img');
+    if (p.thumb) im.src = p.thumb; im.alt = p.name; im.title = p.name;
+    const ctl = el('div', 'ctl');
+    const mk = (t, title, fn) => { const b = el('button', '', t); b.title = title; b.onclick = fn; ctl.append(b); };
+    const i = a.photos.indexOf(p.id);
+    mk('◀', 'Move earlier', () => { if (i > 0) { [a.photos[i - 1], a.photos[i]] = [a.photos[i], a.photos[i - 1]]; refresh(); } });
+    mk('✕', 'Remove from line', () => clickPhoto(p.id));
+    mk('▶', 'Move later', () => { if (i < a.photos.length - 1) { [a.photos[i + 1], a.photos[i]] = [a.photos[i], a.photos[i + 1]]; refresh(); } });
+    d.append(im, el('span', 'n', s.n), ctl); box.append(d);
+  }
+}
+
+/* ---------------- Snip ---------------- */
+const hiRes = new Map();
+async function pageCanvas(num, scale) {
+  const k = num + '@' + scale;
+  if (hiRes.has(k)) return hiRes.get(k);
+  const page = await state.pdf.getPage(num), vp = page.getViewport({ scale });
+  const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  const p = page.render({ canvasContext: ctx, viewport: vp }).promise.then(() => c);
+  hiRes.set(k, p); return p;
+}
+
+async function makeSnip(l, ctxRows, scaleMul = 1) {
+  const pg = state.pages[l.page - 1], S = SNIP_SCALE * scaleMul;
+  const src = await pageCanvas(l.page, S);
+  const r = lineRect(l);
+  let top = r.y0, bot = r.y1;
+  if (!l.rect && ctxRows > 0) {
+    const above = pg.rows.slice(Math.max(0, l.r0 - ctxRows), l.r0), below = pg.rows.slice(l.r1 + 1, l.r1 + 1 + ctxRows);
+    if (above.length) top = Math.min(top, ...above.map(x => x.y0));
+    if (below.length) bot = Math.max(bot, ...below.map(x => x.y1));
+  } else if (l.rect && ctxRows > 0) { const pad = (r.y1 - r.y0) * 0.6 * ctxRows; top -= pad; bot += pad; }
+  const padY = 8, x0 = Math.max(0, Math.min(r.x0, pg.contentX0) - 26), x1 = Math.min(pg.w, Math.max(r.x1, pg.contentX1) + 10);
+  top = Math.max(0, top - padY); bot = Math.min(pg.h, bot + padY);
+  const out = document.createElement('canvas');
+  out.width = Math.round((x1 - x0) * S); out.height = Math.round((bot - top) * S);
+  const g = out.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, out.width, out.height);
+  g.drawImage(src, x0 * S, top * S, out.width, out.height, 0, 0, out.width, out.height);
+  // fade context, then highlight the line
+  const hx = (r.x0 - x0 - 4) * S, hy = (r.y0 - top - 3) * S, hw = (r.x1 - r.x0 + 8) * S, hh = (r.y1 - r.y0 + 6) * S;
+  g.fillStyle = 'rgba(255,255,255,.45)';
+  g.fillRect(0, 0, out.width, Math.max(0, hy)); g.fillRect(0, hy + hh, out.width, out.height - hy - hh);
+  g.fillStyle = 'rgba(255,214,0,.28)'; g.fillRect(hx, hy, hw, hh);
+  g.lineWidth = Math.max(2, 1.6 * S); g.strokeStyle = '#e0162b';
+  g.beginPath(); g.roundRect ? g.roundRect(hx, hy, hw, hh, 3 * S) : g.rect(hx, hy, hw, hh); g.stroke();
+  // arrow pointing at the line from the left margin
+  const ay = hy + hh / 2, ax = Math.max(hx - 2 * S, 14 * S), as = Math.min(hh * 0.5, 7 * S);
+  if (hx > 10 * S) {
+    g.fillStyle = '#e0162b'; g.beginPath();
+    g.moveTo(ax, ay); g.lineTo(ax - as * 1.4, ay - as); g.lineTo(ax - as * 1.4, ay + as); g.closePath(); g.fill();
+  }
+  return out;
+}
+
+/* ---------------- Export ---------------- */
+function openExport() { $('#exportModal').classList.add('open'); renderSeqPreview(); }
+function renderSeqPreview() {
+  const seq = buildSequence($('#optSnip').checked, $('#optRest').checked), host = $('#seq'); host.innerHTML = '';
+  const names = fileNames(seq);
+  seq.forEach((s, i) => {
+    const d = el('div', 'sq' + (s.kind === 'snip' ? ' snip' : '')), im = el('img'), cap = el('div');
+    if (s.kind === 'snip') makeSnip(s.line, +$('#optCtx').value, 0.6).then(c => im.src = c.toDataURL('image/jpeg', 0.7));
+    else if (s.photo.thumb) im.src = s.photo.thumb;
+    cap.innerHTML = `<b>${s.n}</b> `; cap.append(names[i]); cap.title = s.line ? lineText(s.line) : 'unassigned';
+    d.append(im, cap); host.append(d);
+  });
+  $('#exportProgress').textContent = seq.length + ' files';
+}
+function fileNames(seq) {
+  const pad = Math.max(3, String(seq.length).length), mode = $('#optNames').value;
+  return seq.map(s => {
+    const num = String(s.n).padStart(pad, '0');
+    if (s.kind === 'snip') return mode === 'plain' ? num + '.jpg' : `${num} - Line ${String(s.line.no).padStart(2, '0')} estimate.jpg`;
+    const ext = (s.photo.name.match(/\.[^.]+$/) || ['.jpg'])[0].toLowerCase();
+    return mode === 'plain' ? num + ext : `${num} - ${s.photo.name}`;
+  });
+}
+async function* exportFiles() {
+  const seq = buildSequence($('#optSnip').checked, $('#optRest').checked), names = fileNames(seq), ctx = +$('#optCtx').value;
+  for (let i = 0; i < seq.length; i++) {
+    const s = seq[i];
+    $('#exportProgress').textContent = `Preparing ${i + 1} of ${seq.length}…`;
+    let blob;
+    if (s.kind === 'snip') { const c = await makeSnip(s.line, ctx); blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92)); }
+    else blob = s.photo.file; // original bytes, untouched (keeps EXIF/quality)
+    yield { name: names[i], blob };
+  }
+}
+function exportBaseName() { return (state.pdfName.replace(/\.pdf$/i, '') || 'estimate') + ' photos'; }
+
+async function exportZip() {
+  const btns = [$('#zipBtn'), $('#saveFolderBtn')]; btns.forEach(b => b.disabled = true);
+  try {
+    const zip = new JSZip(), dir = zip.folder(exportBaseName());
+    for await (const f of exportFiles()) dir.file(f.name, f.blob, { binary: true });
+    $('#exportProgress').textContent = 'Building ZIP…';
+    const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+    const a = el('a'); a.href = URL.createObjectURL(out); a.download = exportBaseName() + '.zip';
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    $('#exportProgress').textContent = 'ZIP downloaded ✔';
+  } catch (e) { $('#exportProgress').textContent = 'Export failed: ' + e.message; }
+  finally { btns.forEach(b => b.disabled = false); hiRes.clear(); }
+}
+
+async function exportFolder() {
+  if (!window.showDirectoryPicker) { toast('This browser cannot write to folders. Use Download ZIP instead.'); return; }
+  let root;
+  try { root = await showDirectoryPicker({ mode: 'readwrite' }); } catch { return; }
+  const btns = [$('#zipBtn'), $('#saveFolderBtn')]; btns.forEach(b => b.disabled = true);
+  try {
+    const dir = await root.getDirectoryHandle(exportBaseName(), { create: true });
+    for await (const f of exportFiles()) {
+      const fh = await dir.getFileHandle(f.name, { create: true }), w = await fh.createWritable();
+      await w.write(f.blob); await w.close();
+    }
+    $('#exportProgress').textContent = `Saved to "${root.name}/${exportBaseName()}" ✔`;
+  } catch (e) { $('#exportProgress').textContent = 'Save failed: ' + e.message; }
+  finally { btns.forEach(b => b.disabled = false); hiRes.clear(); }
+}
+
+/* ---------------- Autosave (assignments only; files must be re-opened) ---------------- */
+function storeKey() { return state.pdf ? 'eps:' + state.pdfName + ':' + state.pdf.numPages : null; }
+function save() {
+  const k = storeKey(); if (!k || restorePending) return;
+  const data = [...state.lines.values()].filter(l => l.photos.length).map(l => ({ page: l.page, r0: l.r0, r1: l.r1, rect: l.rect, photos: l.photos.map(id => photoById.get(id).relName) }));
+  try { if (data.length) localStorage.setItem(k, JSON.stringify(data)); } catch {}
+}
+let restorePending = false;
+function tryRestore() {
+  const k = storeKey(); if (!k || !state.photos.length || state.lines.size) return;
+  let data; try { data = JSON.parse(localStorage.getItem(k) || 'null'); } catch {} if (!data || !data.length) return;
+  const byName = new Map(state.photos.map(p => [p.relName, p.id]));
+  const hits = data.reduce((n, l) => n + l.photos.filter(x => byName.has(x)).length, 0);
+  if (!hits || !confirm(`Restore your earlier work on this estimate (${hits} photo assignment${hits > 1 ? 's' : ''})?`)) return;
+  for (const l of data) {
+    const key = l.rect ? 'c' + l.page + ':' + Math.round(l.rect.y0) + ':' + Math.round(l.rect.x0) : l.page + ':' + l.r0;
+    const photos = l.photos.map(x => byName.get(x)).filter(Boolean);
+    if (photos.length) state.lines.set(key, { key, page: l.page, r0: l.r0, r1: l.r1, rect: l.rect, photos });
+  }
+}
+
+/* ---------------- Wiring ---------------- */
+$('#pdfInput').onchange = e => { if (e.target.files[0]) loadPdf(e.target.files[0]); e.target.value = ''; };
+$('#folderInput').onchange = e => { addPhotos(e.target.files); e.target.value = ''; };
+$('#filesInput').onchange = e => { addPhotos(e.target.files); e.target.value = ''; };
+$('#numOnly').onchange = applyNumOnly;
+$('#filter').onchange = refresh;
+$('#tsize').oninput = e => $('#grid').style.setProperty('--tw', e.target.value + 'px');
+$('#grid').onclick = e => {
+  const ph = e.target.closest('.ph'); if (!ph) return;
+  const p = photoById.get(+ph.dataset.id);
+  if (e.target.closest('.zoom')) { showPhoto(p); return; }
+  clickPhoto(p.id);
+};
+$('#grid').ondblclick = e => { const ph = e.target.closest('.ph'); if (ph) { e.preventDefault(); } };
+$('#clearLineBtn').onclick = () => { const a = state.lines.get(state.active); if (a) { a.photos = []; refresh(); } };
+$('#clearBtn').onclick = () => { if (state.lines.size && confirm('Remove all photo assignments?')) { state.lines.clear(); state.active = null; try { localStorage.removeItem(storeKey()); } catch {} refresh(); } };
+$('#previewSnipBtn').onclick = async () => {
+  const a = state.lines.get(state.active); if (!a) return;
+  const c = await makeSnip(a, +$('#optCtx').value);
+  const img = el('img'); img.id = 'snipPreview'; img.src = c.toDataURL('image/jpeg', 0.9);
+  $('#lbTitle').textContent = 'Estimate snip: ' + lineText(a);
+  $('#lbBody').innerHTML = ''; $('#lbBody').append(img); $('#lightbox').classList.add('open');
+};
+function showPhoto(p) {
+  const img = el('img'); img.src = URL.createObjectURL(p.file); img.onload = () => URL.revokeObjectURL(img.src);
+  img.onerror = () => { $('#lbBody').textContent = 'This browser cannot preview this file type, but it will still be exported.'; };
+  $('#lbTitle').textContent = p.relName; $('#lbBody').innerHTML = ''; $('#lbBody').append(img); $('#lightbox').classList.add('open');
+}
+$('#lbClose').onclick = () => $('#lightbox').classList.remove('open');
+$('#exportBtn').onclick = openExport;
+$('#exportClose').onclick = () => $('#exportModal').classList.remove('open');
+for (const id of ['#optSnip', '#optCtx', '#optNames', '#optRest']) $(id).onchange = () => { refresh(); renderSeqPreview(); };
+$('#zipBtn').onclick = exportZip;
+$('#saveFolderBtn').onclick = exportFolder;
+if (!window.showDirectoryPicker) $('#saveFolderBtn').style.display = 'none';
+for (const m of document.querySelectorAll('.modal')) m.addEventListener('mousedown', e => { if (e.target === m) m.classList.remove('open'); });
+
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,select')) return;
+  if (e.key === 'Escape') { for (const m of document.querySelectorAll('.modal.open')) m.classList.remove('open'); return; }
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && state.pages.length) {
+    e.preventDefault();
+    const numOnly = $('#numOnly').checked;
+    const all = state.pages.flatMap(pg => pg.rows.map((r, i) => ({ pg, i, r }))).filter(x => !numOnly || x.r.num);
+    if (!all.length) return;
+    const a = state.active && state.lines.get(state.active), down = e.key === 'ArrowDown';
+    let x;
+    if (!a || a.rect) x = all[0];
+    else if (down) x = all.find(c => c.pg.num > a.page || (c.pg.num === a.page && c.i > a.r1)) || all[all.length - 1];
+    else x = [...all].reverse().find(c => c.pg.num < a.page || (c.pg.num === a.page && c.i < a.r0)) || all[0];
+    if (x) clickRow(x.pg, x.i, false);
+  }
+});
+
+// drag & drop
+function dropZone(zone, onFiles) {
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drop-hot'); });
+  zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drop-hot'); });
+  zone.addEventListener('drop', async e => { e.preventDefault(); zone.classList.remove('drop-hot'); onFiles(await filesFromDrop(e.dataTransfer)); });
+}
+async function filesFromDrop(dt) {
+  const entries = [...dt.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (!entries.length) return [...dt.files];
+  const out = [];
+  const walk = async (ent, path) => {
+    if (ent.isFile) { const f = await new Promise((res, rej) => ent.file(res, rej)); Object.defineProperty(f, 'webkitRelativePath', { value: path + f.name }); out.push(f); }
+    else if (ent.isDirectory) {
+      const rd = ent.createReader(); let batch;
+      do { batch = await new Promise((res, rej) => rd.readEntries(res, rej)); for (const b of batch) await walk(b, path + ent.name + '/'); } while (batch.length);
+    }
+  };
+  for (const e of entries) await walk(e, '');
+  return out;
+}
+dropZone($('#pdfBody'), fs => { const f = fs.find(f => /\.pdf$/i.test(f.name)); if (f) loadPdf(f); else toast('Drop a PDF here.'); });
+dropZone($('#photoBody'), fs => addPhotos(fs));
+refresh();
+</script>
+</body>
+</html>
